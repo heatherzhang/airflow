@@ -1,0 +1,87 @@
+from airflow.models import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
+from airflow.sensors.sql import SqlSensor
+from airflow.models import Variable
+import json, os
+
+dag_name = 'name_of_the_dag'
+dag_desc = 'description_of_the_dag'
+
+dag = DAG(
+    dag_id=dag_name,
+    description=dag_desc,
+    default_args=...,
+    schedule_interval=None,
+    tags=AirflowUIDagTags(dag_name).dag_tags
+)
+
+
+def on_success_callback_func(context):
+    ti = context['task_instance']
+
+    dag_id = ti.dag_id
+    task_id = ti.task_id
+    execution_date = ti.execution_date
+    state = 'success'
+    start_date = ti.start_date
+    end_date = ti.end_date
+    duration = ti.duration
+    detail = ti.xcom_pull(task_ids=task_id, key='whatever_detail_to_log')
+    detail = json.dumps({} if detail == None else detail)
+    sql = f"""
+        insert into af_logging (dag_id, task_id, execution_date, state, start_date, end_date, duration, file_name, whatever_detail_to_log)
+          values('{dag_id}','{task_id}', '{execution_date}', '{state}', '{start_date}', '{end_date}', '{duration}', '{fn}', '{whatever_detail_to_log}');
+          """
+
+    src_pg = PostgresHook(postgres_conn_id='OPDB_DEV')
+    db_conn = src_pg.get_conn()
+    cursor = db_conn.cursor()
+    cursor.execute(sql)
+    db_conn.commit()
+    db_conn.close()
+
+
+def on_failure_callback_func(context):
+    ti = context['task_instance']
+
+    dag_id = ti.dag_id
+    task_id = ti.task_id
+    execution_date = ti.execution_date
+    state = 'failure'
+    start_date = ti.start_date
+    end_date = ti.end_date
+    duration = ti.duration
+    detail = ti.xcom_pull(task_ids=task_id, key='whatever_detail_to_log')
+    detail = json.dumps({} if detail == None else detail)
+    sql = f"""
+        insert into af_logging (dag_id, task_id, execution_date, state, start_date, end_date, duration, file_name, whatever_detail_to_log)
+          values('{dag_id}','{task_id}', '{execution_date}', '{state}', '{start_date}', '{end_date}', '{duration}', '{fn}', '{whatever_detail_to_log}');
+          """
+
+    src_pg = PostgresHook(postgres_conn_id='OPDB_DEV')
+    db_conn = src_pg.get_conn()
+    cursor = db_conn.cursor()
+    cursor.execute(sql)
+    db_conn.commit()
+    db_conn.close()
+    
+
+your_af(args, **context):
+    # your work here
+    
+    ti = context['task_instance']
+    whatever_detail_to_log = { "key": {"subkey1": "subkey1 val", "subkey2": "subkey2 val"} }
+    ti.xcom_push(key='whatever_detail_to_log', value=whatever_detail_to_log)
+
+
+your_af_task = PythonOperator(
+    task_id='your_af',
+    python_callable=your_af,
+    op_args = [args],
+    on_success_callback=on_success_callback_func,
+    on_failure_callback=on_failure_callback_func,
+    dag=dag
+)
+
+your_af_task
